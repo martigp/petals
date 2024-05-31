@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04
+FROM nvcr.io/nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04 as base
 LABEL maintainer="bigscience-workshop"
 LABEL repository="petals"
 
@@ -24,8 +24,21 @@ RUN conda install python~=3.10.12 pip && \
 VOLUME /cache
 ENV PETALS_CACHE=/cache
 
+COPY base_requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
+
 COPY . petals/
 RUN pip install --no-cache-dir -e petals
 
-WORKDIR /home/petals/
-CMD bash
+WORKDIR /home/petals
+CMD [ "bash" ]
+
+FROM base as backbone
+# Backbone P2P id is p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs
+CMD [ "python", "src/petals/cli/run_dht.py", "--identity_path", "backbone.id", "--host_maddrs", "/ip4/0.0.0.0/tcp/9000" ]
+
+FROM base as server
+CMD [ "python", "src/petals/cli/run_server.py", "bigscience/bloom-560m", "--num_blocks", "12", "--initial_peers", "/ip4/172.28.5.2/tcp/9000/p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs" ]
+
+FROM base as client
+CMD [ "python", "src/petals/cli/run_client.py"]
