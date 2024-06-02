@@ -21,7 +21,9 @@ def main():
     parser = configargparse.ArgParser(default_config_files=["config.yml"],
                                       formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add('-c', '--config', required=False, is_config_file=True, help='config file path')
-
+    
+    parser.add_argument("--malicious", type=bool,  default=False, required=False,
+                        help="Whether the server is malicious or not")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--converted_model_name_or_path', type=str, default=None,
                        help="path or name of a pretrained model, converted with cli/convert_model.py")
@@ -163,7 +165,7 @@ def main():
 
     parser.add_argument("--adapters", nargs='*', default=(),
                         help="List of pre-loaded LoRA adapters that can be used for inference or training")
-
+    
     # fmt:on
     args = vars(parser.parse_args())
     args.pop("config", None)
@@ -209,6 +211,8 @@ def main():
     quant_type = args.pop("quant_type")
     if quant_type is not None:
         args["quant_type"] = QuantType[quant_type.upper()]
+    
+    malicious = args.pop("malicious")
 
     validate_version()
 
@@ -222,6 +226,7 @@ def main():
         announce_maddrs=announce_maddrs,
         compression=compression,
         max_disk_space=max_disk_space,
+        malicious=malicious
     )
     try:
         server.run()

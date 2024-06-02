@@ -6,17 +6,28 @@ services:
     networks:
       mynet:
         ipv4_address: 172.28.5.2
-  server:
+   server:
+     build: 
+       context: .
+       target: server
+     depends_on:
+       - backbone
+     restart: unless-stopped
+     networks:
+       - mynet
+     deploy:
+       replicas: 3
+  malicious_server:
     build: 
       context: .
-      target: server
+      target: malicious_server
     depends_on:
       - backbone
     restart: unless-stopped
     networks:
       - mynet
     deploy:
-      replicas: 2
+      replicas: 1
   client:
     build: 
       context: .
@@ -24,6 +35,7 @@ services:
     depends_on:
       - backbone
       - server
+      #malicious_server
     restart: unless-stopped
     networks:
       - mynet

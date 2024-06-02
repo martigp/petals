@@ -12,5 +12,6 @@ model = AutoDistributedModelForCausalLM.from_pretrained(model_name, initial_peer
 # Run the model as if it were on your computer
 inputs = tokenizer("A cat sat", return_tensors="pt")["input_ids"]
 outputs = model.generate(inputs, max_new_tokens=5)
+print(f"Gordon: {type(outputs)}") 
 print(tokenizer.decode(outputs[0]))  # A cat sat on a mat...
 

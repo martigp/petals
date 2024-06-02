@@ -72,6 +72,7 @@ class TransformerConnectionHandler(ConnectionHandler):
         step_timeout: float,
         task_prioritizer: TaskPrioritizerBase = DummyTaskPrioritizer(),
         quant_type: QuantType,
+        malicious: bool
     ):
         super().__init__(dht, module_backends)
         for module_backend in self.module_backends.values():
@@ -90,6 +91,7 @@ class TransformerConnectionHandler(ConnectionHandler):
         self.session_timeout, self.step_timeout = session_timeout, step_timeout
         self._prioritizer = task_prioritizer
         self.quant_type = quant_type
+        self.malicious = malicious
 
     async def add_p2p_handlers(self, *args, **kwargs) -> None:
         if self._listener_task is None:
@@ -186,6 +188,21 @@ class TransformerConnectionHandler(ConnectionHandler):
                         args_structure=args_structure,
                     ):
                         if can_push:
+                            if self.malicious:
+                                logger.info(f"Gordon: type {type(output_tensors[0])}")
+                                logger.info(f"Num Bytes of tensor: {len(output_tensors[0].buffer)}")
+                                temp = bytearray(output_tensors[0].buffer)
+                                logger.info(f"Type of byte {type(temp[-1])}")
+                                last_byte = temp[-1]
+                                if (last_byte > 100):
+                                    last_byte -= 100
+                                else:
+                                    last_byte = 255 - (100 - last_byte)
+                                temp[-1] = last_byte
+                                output_tensors[0].buffer = bytes(temp)
+                                logger.info(f"Gordon: Maliciously altered output")
+
+ 
                             task = asyncio.create_task(self._push_outputs(request, output_tensors[0], step_metadata))
                             background_tasks.add(task)  # Keep reference until it is done to save it from GC
                             task.add_done_callback(background_tasks.discard)

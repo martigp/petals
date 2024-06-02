@@ -92,6 +92,7 @@ class Server:
         use_relay: bool = True,
         use_auto_relay: bool = True,
         adapters: Sequence[str] = (),
+        malicious: bool = False,
         **kwargs,
     ):
         """Create a server with one or more bloom blocks. See run_server.py for documentation."""
@@ -212,6 +213,9 @@ class Server:
         self.cache_dir = cache_dir
         self.max_disk_space = max_disk_space
         self.adapters = adapters
+
+        # For malicious inputs
+        self.malicious = malicious
 
         assert num_blocks is None or block_indices is None, "Please specify num_blocks or block_indices, not both"
         if num_blocks is None and block_indices is None:
@@ -362,6 +366,7 @@ class Server:
                 tensor_parallel_devices=self.tensor_parallel_devices,
                 should_validate_reachability=self.should_validate_reachability,
                 start=True,
+                malicious=self.malicious
             )
             try:
                 self.module_container.ready.wait()
@@ -460,6 +465,7 @@ class ModuleContainer(threading.Thread):
         quant_type: QuantType,
         tensor_parallel_devices: Sequence[torch.device],
         should_validate_reachability: bool,
+        malicious : bool,
         **kwargs,
     ) -> ModuleContainer:
         module_uids = [f"{dht_prefix}{UID_DELIMITER}{block_index}" for block_index in block_indices]
@@ -550,6 +556,7 @@ class ModuleContainer(threading.Thread):
             dht_announcer=dht_announcer,
             server_info=server_info,
             update_period=update_period,
+            malicious=malicious,
             expiration=expiration,
             **kwargs,
         )
@@ -565,6 +572,7 @@ class ModuleContainer(threading.Thread):
         dht_announcer: ModuleAnnouncerThread,
         server_info: ServerInfo,
         update_period: float,
+        malicious : bool,
         expiration: Optional[float] = None,
         request_timeout: float,
         session_timeout: float,
@@ -591,6 +599,7 @@ class ModuleContainer(threading.Thread):
                 session_timeout=session_timeout,
                 step_timeout=step_timeout,
                 quant_type=QuantType[server_info.quant_type.upper()],
+                malicious=malicious
             )
             for i in range(num_handlers)
         ]

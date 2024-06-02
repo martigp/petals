@@ -38,7 +38,10 @@ FROM base as backbone
 CMD [ "python", "src/petals/cli/run_dht.py", "--identity_path", "backbone.id", "--host_maddrs", "/ip4/0.0.0.0/tcp/9000" ]
 
 FROM base as server
-CMD [ "python", "src/petals/cli/run_server.py", "bigscience/bloom-560m", "--num_blocks", "12", "--initial_peers", "/ip4/172.28.5.2/tcp/9000/p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs" ]
+CMD [ "python", "src/petals/cli/run_server.py", "bigscience/bloom-560m", "--num_blocks", "24", "--initial_peers", "/ip4/172.28.5.2/tcp/9000/p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs" ]
 
 FROM base as client
 CMD [ "python", "src/petals/cli/run_client.py"]
+
+FROM base as malicious_server
+CMD [ "python", "src/petals/cli/run_server.py", "bigscience/bloom-560m", "--num_blocks", "12", "--initial_peers", "/ip4/172.28.5.2/tcp/9000/p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs", "--malicious", "True" ]
