@@ -28,7 +28,7 @@ COPY base_requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
 COPY . petals/
-RUN pip install --no-cache-dir -e petals
+RUN pip install --no-cache-dir -e ./petals
 
 WORKDIR /home/petals
 CMD [ "bash" ]
