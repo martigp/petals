@@ -16,7 +16,7 @@ services:
      networks:
        - mynet
      deploy:
-       replicas: 3
+       replicas: 7
   malicious_server:
     build: 
       context: .

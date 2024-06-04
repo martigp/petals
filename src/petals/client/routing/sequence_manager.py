@@ -211,7 +211,7 @@ class RemoteSequenceManager:
                 if matching_span.end >= span.end and matching_span.peer_id != span.peer_id:
                     matching_span = dataclasses.replace(matching_span, start=span.start, end=span.end)
                     candidates.append(matching_span)
-                    candidate_weights.append(client_server_rtts.get(matching_span.peer_id))
+                    candidate_weights.append(client_server_rtts.get(matching_span.peer_id, 1e-9))
             
             if len(candidates) == 0:
                 logger.info(f"Unable to find a match to replace span from {span.start}->{span.end}")
@@ -439,6 +439,7 @@ class RemoteSequenceManager:
 
     def on_request_failure(self, peer_id: Optional[PeerID]):
         """remove a given peer from the routing table. If the routing is no longer possible, trigger an update"""
+        logger.info(f"On request failure: {peer_id}")
         if peer_id is not None:
             logger.debug(f"Peer {peer_id} did not respond, banning it temporarily")
             self.state.banned_peers.register_failure(peer_id)
