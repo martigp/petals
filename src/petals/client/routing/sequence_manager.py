@@ -218,7 +218,9 @@ class RemoteSequenceManager:
                 new_path.append(span)
                 continue
             
-            candidate_weights = np.array(candidate_weights) / sum(candidate_weights)
+            logger.info(f"Found {len(candidates)} candidates to replace span from {span.start}->{span.end}")
+            logger.info(f"Candidate weights: {candidate_weights}")
+            candidate_weights = np.array(candidate_weights) / np.sum(candidate_weights)
             chosen_candidate = np.random.choice(candidates, p=candidate_weights)
             new_path.append(chosen_candidate)
         

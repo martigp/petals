@@ -17,17 +17,17 @@ services:
        - mynet
      deploy:
        replicas: 3
-  malicious_server:
-    build: 
-      context: .
-      target: malicious_server
-    depends_on:
-      - backbone
-    restart: unless-stopped
-    networks:
-      - mynet
-    deploy:
-      replicas: 1
+  # malicious_server:
+  #   build: 
+  #     context: .
+  #     target: malicious_server
+  #   depends_on:
+  #     - backbone
+  #   restart: unless-stopped
+  #   networks:
+  #     - mynet
+  #   deploy:
+  #     replicas: 1
   client:
     build: 
       context: .
