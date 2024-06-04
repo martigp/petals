@@ -344,6 +344,13 @@ class InferenceSession:
         updated_spans = self._sequence_manager.make_sequence(
             block_idx, update_end, mode="min_latency", cache_tokens_needed=self._max_length
         )
+        second_span = self._sequence_manager.make_second_replacement_sequence(block_idx, update_end,
+                                                                              mode="max_throughput",
+                                                                              confidence=0.5,
+                                                                              currentPath=updated_spans)
+        new_route_repr = " => ".join(
+                [f"{span.start}:{span.end} via …{str(span.peer_id)[-6:]}" for span in second_span])
+        logger.info(f"Gordon: New route: {new_route_repr}")         
         # make_sequence() could return a longer sequence
         updated_spans[-1].end = min(updated_spans[-1].end, update_end)
         updated_sessions = self._enter_server_sessions(updated_spans)

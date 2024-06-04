@@ -173,6 +173,56 @@ class RemoteSequenceManager:
             )
             logger.info(f"Route found: {route_repr}")
         return span_sequence
+    
+    def make_second_replacement_sequence(self,
+        start : int = 0,
+        end_index: Optional[int] = None,
+        *,
+        mode: str,
+        cache_tokens_needed: Optional[int] = None, 
+        confidence : float = 0, currentPath : List[RemoteSpanInfo] = []
+    ) -> List[RemoteSpanInfo] :
+        with self._thread_start_lock:
+            if not self.is_alive():
+                self._thread.start()
+        if not self.ready.is_set():
+            self.update(wait=True)  # this will await an existing update or trigger a new one (if not updating)
+
+        end_index = end_index if end_index is not None else len(self)
+        candidates = []
+        client_server_rtts = self.ping_aggregator.to_dict()
+        new_path = []
+        for span in currentPath:
+            if (np.random.random() > confidence):
+                new_path.append(span)
+                continue
+            
+            logger.info(f"Gordon: Chose to relace span from {span.start}->{span.end}")
+            matching_spans = self.state.sequence_info.spans_containing_block[span.start]
+            if not matching_spans:
+                logger.info(f"Gordon: couldn't find a replacement for block {span.start}")
+                new_path.append(span)
+                continue
+                
+            # Check that at least one of these ends
+            candidates = []
+            candidate_weights = []
+            for matching_span in matching_spans:
+                if matching_span.end >= span.end and matching_span.peer_id != span.peer_id:
+                    matching_span = dataclasses.replace(matching_span, start=span.start, end=span.end)
+                    candidates.append(matching_span)
+                    candidate_weights.append(client_server_rtts.get(matching_span.peer_id))
+            
+            if len(candidates) == 0:
+                logger.info(f"Unable to find a match to replace span from {span.start}->{span.end}")
+                new_path.append(span)
+                continue
+            
+            candidate_weights = np.array(candidate_weights) / sum(candidate_weights)
+            chosen_candidate = np.random.choice(candidates, p=candidate_weights)
+            new_path.append(chosen_candidate)
+        
+        return new_path
 
     def _make_sequence_with_min_latency(
         self, start_index: int, end_index: int, *, cache_tokens_needed: Optional[int]
