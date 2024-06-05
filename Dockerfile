@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir -e ./petals
 WORKDIR /home/petals
 CMD [ "bash" ]
 
-ENV TRUSTED_PEERS='/ip4/172.28.5.2/tcp/9000/p2p/QmeMMaJCua1NMtiCzYVbYkvaFoVUaRsuo8jX18SfK6CdyB'
+# ENV TRUSTED_PEERS='/ip4/172.28.5.2/tcp/9000/p2p/QmeMMaJCua1NMtiCzYVbYkvaFoVUaRsuo8jX18SfK6CdyB'
 
 FROM base as backbone
 # Backbone P2P id is p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs
