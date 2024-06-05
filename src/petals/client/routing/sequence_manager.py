@@ -14,7 +14,7 @@ from weakref import WeakMethod
 import dijkstar
 import numpy as np
 from hivemind import DHT, P2P, MSGPackSerializer, PeerID
-from hivemind.dht.node import Blacklist, PeerReputations
+from hivemind.dht.node import Blacklist
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.proto import runtime_pb2
 from hivemind.utils.logging import get_logger
@@ -29,6 +29,50 @@ from petals.utils.ping import PingAggregator
 from petals.utils.random import sample_up_to
 
 logger = get_logger(__name__)
+
+class Reputation:
+    """
+    A peer reputation. Defined by the number of agreements / number of checks.
+    num_agrees starts as 1
+    num_checks starts as 2
+    """
+    def __init__ (self):
+        self.num_agrees : int  = 1
+        self.num_checks : int = 2
+
+    def add_disagree(self):
+        self.num_checks += 1
+
+    def add_agree(self):
+        self.num_checks += 1
+        self.num_agrees += 1
+    
+    def get_reputation(self) -> float:
+        return float(self.num_agrees) / float(self.num_checks)
+    
+class PeerReputations:
+    """
+    Represents the representations of every peer. Agreements and disagreements
+    are registered through this class and this class will return the reputation
+    of a given peer.
+    """
+    def __init__ (self):
+        self.peer_reputations : Dict[PeerID, Reputation] = dict()
+    
+    def register_disagreement(self, peer : PeerID):
+        if peer not in self.peer_reputations:
+            self.peer_reputations[peer] = Reputation()
+        self.peer_reputations[peer].add_disagree()
+    
+    def register_agreement(self, peer : PeerID):
+        if peer not in self.peer_reputations:
+            self.peer_reputations[peer] = Reputation()
+        self.peer_reputations[peer].add_agree()
+    
+    def get_peer_reputation(self, peer : PeerID) -> float:
+        if peer not in self.peer_reputations:
+            self.peer_reputations[peer] = Reputation()
+        return self.peer_reputations[peer].get_reputation()
 
 
 class SequenceManagerConfig(ClientConfig):
@@ -355,7 +399,7 @@ class RemoteSequenceManager:
         # This is okay since false positives are more costly than false negatives here.
         return cache_tokens_needed * 2 * span.length <= span.server_info.cache_tokens_left
 
-    def _make_sequence_with_max_throughput(self, start_index: int, end_index: int, confidence : float) -> List[RemoteSpanInfo]:
+    def _make_sequence_with_max_throughput(self, start_index: int, end_index: int, confidence : float = 0.5) -> List[RemoteSpanInfo]:
         client_server_rtts = self.ping_aggregator.to_dict()
 
         span_sequence = []
