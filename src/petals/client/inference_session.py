@@ -5,6 +5,7 @@ import itertools
 import time
 import uuid
 from typing import AsyncIterator, List, Optional, Tuple
+import threading
 
 import torch
 from hivemind import MSGPackSerializer, anext, deserialize_torch_tensor, get_logger, serialize_torch_tensor
@@ -309,15 +310,20 @@ class InferenceSession:
                     if run_second_inference:
                         second_inputs = inputs.detach().clone()
                     logger.info(f"Running inference for {block_idx} via {server_session.span.peer_id} and {second_server_session.span.peer_id}")
-                    inputs = server_session.step(
-                        inputs, prompts[server_session.span.start : server_session.span.end], hypo_ids, step_id=step_id
-                    )
+                    def f():
+                        nonlocal inputs
+                        inputs = server_session.step(
+                            inputs, prompts[server_session.span.start : server_session.span.end], hypo_ids, step_id=step_id
+                        )
+                    thread = threading.Thread(target=f)
+                    thread.start()
                     if run_second_inference:
                         logger.info(f"Running inference via second server")
                         second_inputs = second_server_session.step(
                             second_inputs, prompts[second_server_session.span.start : second_server_session.span.end], hypo_ids, step_id=step_id
                         )
-                    else: 
+                    thread.join()
+                    if not run_second_inference: 
                         logger.info(f"Serving from the same server, skipping second server inference")
                         second_inputs = inputs
                     
