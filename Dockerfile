@@ -33,12 +33,17 @@ RUN pip install --no-cache-dir -e ./petals
 WORKDIR /home/petals
 CMD [ "bash" ]
 
+ENV TRUSTED_PEERS='/ip4/172.28.5.2/tcp/9000/p2p/QmeMMaJCua1NMtiCzYVbYkvaFoVUaRsuo8jX18SfK6CdyB'
+
 FROM base as backbone
 # Backbone P2P id is p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs
 CMD [ "python", "src/petals/cli/run_dht.py", "--identity_path", "backbone.id", "--host_maddrs", "/ip4/0.0.0.0/tcp/9000" ]
 
 FROM base as server
 CMD [ "python", "src/petals/cli/run_server.py", "bigscience/bloom-560m", "--num_blocks", "12", "--initial_peers", "/ip4/172.28.5.2/tcp/9000/p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs" ]
+
+FROM base as trusted_server
+CMD [ "python", "src/petals/cli/run_server.py", "bigscience/bloom-560m", "--identity_path", "trusted_server.id" , "--host_maddrs", "/ip4/0.0.0.0/tcp/9001", "--num_blocks", "12", "--initial_peers", "/ip4/172.28.5.2/tcp/9000/p2p/QmaFMcNeEjz7U8AeqF6euSFZz4c1LAyuJhpYAf7DtPJkHs" ]
 
 FROM base as client
 CMD [ "python", "src/petals/cli/run_client.py"]

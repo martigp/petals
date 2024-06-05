@@ -155,9 +155,13 @@ class RemoteSequenceManager:
         if state.trusted_peers is None:
             trusted_peers_str : str = os.environ.get("TRUSTED_PEERS")
             if trusted_peers_str != None:
+                logger.info(f"GORDON: found trusted peer env variable {trusted_peers_str}")
                 trusted_peers = trusted_peers_str.split(',')
                 self.trusted_peers = [PeerID.from_base58(Multiaddr(item)["p2p"]) for item in trusted_peers]
+                for trusted_peer in self.trusted_peers:
+                    logger.info(f"GORDON: trusted peer peerid {trusted_peer.to_string()}")
             else:
+                logger.info(f"GORDON: could not find trusted_peers")
                 self.trusted_peers = []
 
         self.lock_changes = threading.Lock()

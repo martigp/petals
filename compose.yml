@@ -1,15 +1,17 @@
 services:
   backbone:
-    build: 
+    build:
       context: .
       target: backbone
     networks:
       mynet:
         ipv4_address: 172.28.5.2
   server:
-     build: 
+     build:
        context: .
        target: server
+     environment:
+       - TRUSTED_PEERS=/ip4/172.28.5.2/tcp/9000/p2p/QmeMMaJCua1NMtiCzYVbYkvaFoVUaRsuo8jX18SfK6CdyB
      depends_on:
        - backbone
      restart: unless-stopped
@@ -18,7 +20,7 @@ services:
      deploy:
        replicas: 7
   malicious_server:
-    build: 
+    build:
       context: .
       target: malicious_server
     depends_on:
@@ -29,7 +31,7 @@ services:
     deploy:
       replicas: 1
   client:
-    build: 
+    build:
       context: .
       target: client
     depends_on:
@@ -39,7 +41,19 @@ services:
     restart: unless-stopped
     networks:
       - mynet
-    
+  trusted_server:
+    build:
+      context: .
+      target: trusted_server
+    depends_on:
+      - backbone
+    restart: unless-stopped
+    networks:
+      mynet:
+        ipv4_address: 172.28.5.3
+    deploy:
+      replicas: 1
+
 networks:
   mynet:
     ipam:
