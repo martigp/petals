@@ -297,7 +297,7 @@ class RemoteSequenceManager:
         client_server_rtts = self.ping_aggregator.to_dict()
         new_path = []
         for span in currentPath:
-            if (np.random.random() > self.path_replication):
+            if (np.random.random() > self.state.path_replication):
                 new_path.append(span)
                 continue
             
