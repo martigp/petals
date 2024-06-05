@@ -189,10 +189,7 @@ class TransformerConnectionHandler(ConnectionHandler):
                     ):
                         if can_push:
                             if self.malicious:
-                                logger.info(f"Gordon: type {type(output_tensors[0])}")
-                                logger.info(f"Num Bytes of tensor: {len(output_tensors[0].buffer)}")
                                 temp = bytearray(output_tensors[0].buffer)
-                                logger.info(f"Type of byte {type(temp[-1])}")
                                 last_byte = temp[-1]
                                 if (last_byte > 100):
                                     last_byte -= 100

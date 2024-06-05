@@ -38,19 +38,27 @@ class Reputation:
     num_agrees starts as 1
     num_checks starts as 2
     """
-    def __init__ (self):
-        self.num_agrees : int  = 1
-        self.num_checks : int = 2
+    def __init__ (self, num_agrees : int = 1, num_checks : int = 2, trusted : bool = False):
+        self.num_agrees : int  = num_agrees
+        self.num_checks : int = num_checks
+        self.trusted : bool = trusted
 
     def add_disagree(self):
-        self.num_checks += 1
+        if not self.trusted:
+            self.num_checks += 1
 
     def add_agree(self):
-        self.num_checks += 1
-        self.num_agrees += 1
+        if not self.trusted:
+            self.num_checks += 1
+            self.num_agrees += 1
     
     def get_reputation(self) -> float:
-        return float(self.num_agrees) / float(self.num_checks)
+        if self.trusted:
+            # Make this a number that is greater than 1 but won't far outweight
+            # other peers with good reputation ~0.8 (0.667 >= in steady state)
+            return 3.0
+        else:
+            return float(self.num_agrees) / float(self.num_checks)
     
 class PeerReputations:
     """
@@ -97,6 +105,8 @@ class SequenceManagerState:
     banned_peers: Optional[Blacklist] = None
     reputations: Optional[PeerReputations] = None
     trusted_peers : Optional[list[PeerID]] = None
+    path_replication : Optional[float] = None
+    reputation_weight : Optional[float] = None
 
     def __getitem__(self, ix: Union[int, slice]) -> SequenceManagerState:
         return dataclasses.replace(self, sequence_info=self.sequence_info[ix])
@@ -155,14 +165,37 @@ class RemoteSequenceManager:
         if state.trusted_peers is None:
             trusted_peers_str : str = os.environ.get("TRUSTED_PEERS")
             if trusted_peers_str != None:
-                logger.info(f"GORDON: found trusted peer env variable {trusted_peers_str}")
                 trusted_peers = trusted_peers_str.split(',')
                 self.trusted_peers = [PeerID.from_base58(Multiaddr(item)["p2p"]) for item in trusted_peers]
                 for trusted_peer in self.trusted_peers:
+                    state.reputations[trusted_peer] = Reputation(trusted=True)
                     logger.info(f"GORDON: trusted peer peerid {trusted_peer.to_string()}")
             else:
-                logger.info(f"GORDON: could not find trusted_peers")
+                logger.debug(f"GORDON: no trusted_peers provided")
                 self.trusted_peers = []
+
+        if self.state.path_replication is None:
+            path_replication : str = os.environ.get("PATH_REPLICATION")
+            if path_replication != None:
+                self.state.path_replication = float(path_replication)
+                if self.path_replication < 0 or self.state.path_replication > 1:
+                    logger.warn(f"GORDON: Provided invalid PATH_REPLICATION {self.state.path_replication}, must be [0,1]")
+                    self.state.path_replication = 0.5
+            else:
+                self.state.path_repliction = 0.5
+            logger.debug(f"GORDON: Set path replication to {self.state.path_replication} ")
+        
+        if self.state.reputation_weight is None:
+            reputation_weight : str = os.environ.get("REPUTATION_WEIGHT")
+            if reputation_weight != None:
+                self.state.reputation_weight = float(reputation_weight)
+                if self.state.reputation_weight < 0 or self.state.reputation_weight > 1:
+                    logger.warn(f"GORDON: Provided invalid REPUTATION_WEIGHT {self.state.reputation_weight}, must be [0,1]")
+                    self.state.reputation_weight = 0
+            else:
+                self.state.reputation_weight = 0
+            logger.debug(f"GORDON: Set reputation weight to {self.state.reputation_weight} ")
+
 
         self.lock_changes = threading.Lock()
         self._thread = _SequenceManagerUpdateThread(config.update_period, WeakMethod(self._update))
@@ -244,8 +277,8 @@ class RemoteSequenceManager:
         end_index: Optional[int] = None,
         *,
         mode: str,
-        cache_tokens_needed: Optional[int] = None, 
-        confidence : float = 0, currentPath : List[RemoteSpanInfo] = []
+        cache_tokens_needed: Optional[int] = None,
+        currentPath : List[RemoteSpanInfo] = []
     ) -> List[RemoteSpanInfo] :
         with self._thread_start_lock:
             if not self.is_alive():
@@ -258,11 +291,11 @@ class RemoteSequenceManager:
         client_server_rtts = self.ping_aggregator.to_dict()
         new_path = []
         for span in currentPath:
-            if (np.random.random() > confidence):
+            if (np.random.random() > self.path_replication):
                 new_path.append(span)
                 continue
             
-            logger.info(f"Gordon: Chose to relace span from {span.start}->{span.end}")
+            logger.info(f"Gordon: Chose to replicate span from {span.start}->{span.end}")
             matching_spans = self.state.sequence_info.spans_containing_block[span.start]
             if not matching_spans:
                 logger.info(f"Gordon: couldn't find a replacement for block {span.start}")
@@ -276,7 +309,8 @@ class RemoteSequenceManager:
                 if matching_span.end >= span.end and matching_span.peer_id != span.peer_id:
                     matching_span = dataclasses.replace(matching_span, start=span.start, end=span.end)
                     candidates.append(matching_span)
-                    candidate_weights.append(client_server_rtts.get(matching_span.peer_id, 1e-9))
+                    # Second path we choose based on reputation
+                    candidate_weights.append(self.state.reputations.get_peer_reputation(matching_span.peer_id))
             
             if len(candidates) == 0:
                 logger.info(f"Unable to find a match to replace span from {span.start}->{span.end}")
@@ -416,7 +450,7 @@ class RemoteSequenceManager:
         # This is okay since false positives are more costly than false negatives here.
         return cache_tokens_needed * 2 * span.length <= span.server_info.cache_tokens_left
 
-    def _make_sequence_with_max_throughput(self, start_index: int, end_index: int, confidence : float = 0.5) -> List[RemoteSpanInfo]:
+    def _make_sequence_with_max_throughput(self, start_index: int, end_index: int) -> List[RemoteSpanInfo]:
         client_server_rtts = self.ping_aggregator.to_dict()
 
         span_sequence = []
@@ -440,7 +474,7 @@ class RemoteSequenceManager:
                 dtype=np.float64
             )
             reputation_weights /= reputation_weights.sum()
-            span_weights = ((1-confidence) * throughput_weights) + (confidence * reputation_weights)
+            span_weights = ((1-self.reputation_weight) * throughput_weights) + (self.reputation_weight * reputation_weights)
 
             chosen_span = np.random.choice(candidate_spans, p=span_weights)
 

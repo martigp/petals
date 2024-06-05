@@ -34,6 +34,9 @@ services:
     build:
       context: .
       target: client
+    environment:
+      - PATH_REPLICATION=0.75
+      - REPUTATION_WEIGHT=0.75
     depends_on:
       - backbone
       - server

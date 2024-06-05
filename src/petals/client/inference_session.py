@@ -377,11 +377,10 @@ class InferenceSession:
             )
 
         updated_spans = self._sequence_manager.make_sequence(
-            block_idx, update_end, mode="min_latency", cache_tokens_needed=self._max_length
+            block_idx, update_end, mode="max_throughput", cache_tokens_needed=self._max_length
         )
         second_updated_spans = self._sequence_manager.make_second_replacement_sequence(block_idx, update_end,
                                                                               mode="max_throughput",
-                                                                              confidence=0.5,
                                                                               currentPath=updated_spans)
         new_route_repr = " => ".join(
                 [f"{span.start}:{span.end} via …{str(span.peer_id)[-6:]}" for span in second_updated_spans])
