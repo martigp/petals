@@ -10,10 +10,12 @@ import time
 import warnings
 from typing import Any, Dict, List, Optional, Sequence, Set, Union
 from weakref import WeakMethod
+import os
 
 import dijkstar
 import numpy as np
 from hivemind import DHT, P2P, MSGPackSerializer, PeerID
+from multiaddr import Multiaddr
 from hivemind.dht.node import Blacklist
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.proto import runtime_pb2
@@ -75,6 +77,7 @@ class PeerReputations:
         return self.peer_reputations[peer].get_reputation()
 
 
+
 class SequenceManagerConfig(ClientConfig):
     def __init__(self, *args, **kwargs):
         warnings.warn(
@@ -93,6 +96,7 @@ class SequenceManagerState:
     rpc_info: Optional[dict] = None
     banned_peers: Optional[Blacklist] = None
     reputations: Optional[PeerReputations] = None
+    trusted_peers : Optional[list[PeerID]] = None
 
     def __getitem__(self, ix: Union[int, slice]) -> SequenceManagerState:
         return dataclasses.replace(self, sequence_info=self.sequence_info[ix])
@@ -146,6 +150,15 @@ class RemoteSequenceManager:
         
         if state.reputations is None:
             state.reputations = PeerReputations()
+        
+        # Gordon Added
+        if state.trusted_peers is None:
+            trusted_peers_str : str = os.environ.get("TRUSTED_PEERS")
+            if trusted_peers_str != None:
+                trusted_peers = trusted_peers_str.split(',')
+                self.trusted_peers = [PeerID.from_base58(Multiaddr(item)["p2p"]) for item in trusted_peers]
+            else:
+                self.trusted_peers = []
 
         self.lock_changes = threading.Lock()
         self._thread = _SequenceManagerUpdateThread(config.update_period, WeakMethod(self._update))

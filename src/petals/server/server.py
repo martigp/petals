@@ -148,6 +148,7 @@ class Server:
             client_mode=reachable_via_relay,
             **kwargs,
         )
+        logger.info(f"GORDON: server prefix: {self.dht_prefix}, server_peer_id: {self.dht.peer_id}")
         self.reachability_protocol = ReachabilityProtocol.attach_to_dht(self.dht) if not reachable_via_relay else None
 
         visible_maddrs_str = [str(a) for a in self.dht.get_visible_maddrs()]
