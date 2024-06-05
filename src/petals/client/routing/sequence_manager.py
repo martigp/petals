@@ -38,9 +38,9 @@ class Reputation:
     num_agrees starts as 1
     num_checks starts as 2
     """
-    def __init__ (self, num_agrees : int = 1, num_checks : int = 2, trusted : bool = False):
-        self.num_agrees : int  = num_agrees
-        self.num_checks : int = num_checks
+    def __init__ (self, num_agrees : float = 1.0, num_checks : float = 2.0, trusted : bool = False):
+        self.num_agrees : float  = num_agrees
+        self.num_checks : float = num_checks
         self.trusted : bool = trusted
 
     def add_disagree(self):
@@ -58,7 +58,7 @@ class Reputation:
             # other peers with good reputation ~0.8 (0.667 >= in steady state)
             return 3.0
         else:
-            return float(self.num_agrees) / float(self.num_checks)
+            return self.num_agrees / self.num_checks
     
 class PeerReputations:
     """
@@ -83,6 +83,10 @@ class PeerReputations:
         if peer not in self.peer_reputations:
             self.peer_reputations[peer] = Reputation()
         return self.peer_reputations[peer].get_reputation()
+
+    def add_peer(self, peer: PeerID, trusted : bool = False):
+        self.peer_reputations[peer] = Reputation(trusted)
+
 
 
 
@@ -158,17 +162,17 @@ class RemoteSequenceManager:
         if state.p2p is None:
             state.p2p = RemoteExpertWorker.run_coroutine(dht.replicate_p2p())
         
-        if state.reputations is None:
-            state.reputations = PeerReputations()
+        if self.state.reputations is None:
+            self.state.reputations = PeerReputations()
         
         # Gordon Added
-        if state.trusted_peers is None:
+        if self.state.trusted_peers is None:
             trusted_peers_str : str = os.environ.get("TRUSTED_PEERS")
             if trusted_peers_str != None:
                 trusted_peers = trusted_peers_str.split(',')
                 self.trusted_peers = [PeerID.from_base58(Multiaddr(item)["p2p"]) for item in trusted_peers]
                 for trusted_peer in self.trusted_peers:
-                    state.reputations[trusted_peer] = Reputation(trusted=True)
+                    self.state.reputations.add_peer(trusted_peer, trusted=True)
                     logger.info(f"GORDON: trusted peer peerid {trusted_peer.to_string()}")
             else:
                 logger.debug(f"GORDON: no trusted_peers provided")
