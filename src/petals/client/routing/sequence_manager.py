@@ -181,10 +181,11 @@ class RemoteSequenceManager:
         if self.state.path_replication is None:
             path_replication : str = os.environ.get("PATH_REPLICATION")
             if path_replication != None:
-                self.state.path_replication = float(path_replication)
-                if self.path_replication < 0 or self.state.path_replication > 1:
+                path_replication = float(path_replication)
+                if path_replication < 0 or path_replication > 1:
                     logger.warn(f"GORDON: Provided invalid PATH_REPLICATION {self.state.path_replication}, must be [0,1]")
-                    self.state.path_replication = 0.5
+                    path_replication = 0.5
+                self.state.path_replication = path_replication
             else:
                 self.state.path_repliction = 0.5
             logger.debug(f"GORDON: Set path replication to {self.state.path_replication} ")
@@ -192,10 +193,11 @@ class RemoteSequenceManager:
         if self.state.reputation_weight is None:
             reputation_weight : str = os.environ.get("REPUTATION_WEIGHT")
             if reputation_weight != None:
-                self.state.reputation_weight = float(reputation_weight)
-                if self.state.reputation_weight < 0 or self.state.reputation_weight > 1:
+                reputation_weight = float(reputation_weight)
+                if reputation_weight < 0 or reputation_weight > 1:
                     logger.warn(f"GORDON: Provided invalid REPUTATION_WEIGHT {self.state.reputation_weight}, must be [0,1]")
-                    self.state.reputation_weight = 0
+                    reputation_weight = 0
+                self.state.reputation_weight = reputation_weight
             else:
                 self.state.reputation_weight = 0
             logger.debug(f"GORDON: Set reputation weight to {self.state.reputation_weight} ")
