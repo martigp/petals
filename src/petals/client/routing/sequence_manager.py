@@ -14,7 +14,7 @@ from weakref import WeakMethod
 import dijkstar
 import numpy as np
 from hivemind import DHT, P2P, MSGPackSerializer, PeerID
-from hivemind.dht.node import Blacklist
+from hivemind.dht.node import Blacklist, PeerReputations
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.proto import runtime_pb2
 from hivemind.utils.logging import get_logger
@@ -48,6 +48,7 @@ class SequenceManagerState:
     sequence_info: Optional[RemoteSequenceInfo] = None
     rpc_info: Optional[dict] = None
     banned_peers: Optional[Blacklist] = None
+    reputations: Optional[PeerReputations] = None
 
     def __getitem__(self, ix: Union[int, slice]) -> SequenceManagerState:
         return dataclasses.replace(self, sequence_info=self.sequence_info[ix])
@@ -98,6 +99,9 @@ class RemoteSequenceManager:
 
         if state.p2p is None:
             state.p2p = RemoteExpertWorker.run_coroutine(dht.replicate_p2p())
+        
+        if state.reputations is None:
+            state.reputations = PeerReputations()
 
         self.lock_changes = threading.Lock()
         self._thread = _SequenceManagerUpdateThread(config.update_period, WeakMethod(self._update))
@@ -351,7 +355,7 @@ class RemoteSequenceManager:
         # This is okay since false positives are more costly than false negatives here.
         return cache_tokens_needed * 2 * span.length <= span.server_info.cache_tokens_left
 
-    def _make_sequence_with_max_throughput(self, start_index: int, end_index: int) -> List[RemoteSpanInfo]:
+    def _make_sequence_with_max_throughput(self, start_index: int, end_index: int, confidence : float) -> List[RemoteSpanInfo]:
         client_server_rtts = self.ping_aggregator.to_dict()
 
         span_sequence = []
@@ -364,11 +368,20 @@ class RemoteSequenceManager:
             # We choose longer servers to minimize the number of hops but leave some randomization
             # to distribute the load. We also exclude servers known to be unreachable.
             eps = 1e-6
-            span_weights = np.array(
+            throughput_weights = np.array(
                 [span.length if client_server_rtts.get(span.peer_id) != np.inf else eps for span in candidate_spans],
                 dtype=np.float64,
             )
-            chosen_span = np.random.choice(candidate_spans, p=span_weights / span_weights.sum())
+            throughput_weights /= throughput_weights.sum()
+
+            reputation_weights = np.array(
+                [self.state.reputations.get_peer_reputation(span.peer_id) for span in candidate_spans],
+                dtype=np.float64
+            )
+            reputation_weights /= reputation_weights.sum()
+            span_weights = ((1-confidence) * throughput_weights) + (confidence * reputation_weights)
+
+            chosen_span = np.random.choice(candidate_spans, p=span_weights)
 
             assert chosen_span.start <= current_index < chosen_span.end
             span_sequence.append(dataclasses.replace(chosen_span, start=current_index))
@@ -437,12 +450,16 @@ class RemoteSequenceManager:
 
         self.ready.set()
 
-    def on_request_failure(self, peer_id: Optional[PeerID]):
+    def on_request_failure(self, peer_id: Optional[PeerID], disagreement : bool = False):
         """remove a given peer from the routing table. If the routing is no longer possible, trigger an update"""
         logger.info(f"On request failure: {peer_id}")
-        if peer_id is not None:
-            logger.debug(f"Peer {peer_id} did not respond, banning it temporarily")
-            self.state.banned_peers.register_failure(peer_id)
+        if peer_id is not None and not disagreement:
+            if disagreement:
+                logger.debug(f"Peer {peer_id} disagreed, harming reputation")
+                self.state.reputations.register_disagreement(peer_id)
+            else:
+                logger.debug(f"Peer {peer_id} did not respond, banning it temporarily")
+                self.state.banned_peers.register_failure(peer_id)
         with self.lock_changes:
             should_update = False
             for info in self.state.sequence_info.block_infos:
@@ -453,8 +470,12 @@ class RemoteSequenceManager:
                 self.ready.clear()
                 self.update(wait=False)
 
-    def on_request_success(self, peer_id: PeerID):
+    def on_request_success(self, peer_id: PeerID, registerAgreement : bool = True):
         """if peer has a failure streak, clear that streak"""
+        if registerAgreement:
+            logger.debug(f"Peer {peer_id} agreed, improving reputation")
+            self.state.reputations.register_agreement(peer_id)
+        
         self.state.banned_peers.register_success(peer_id)
 
     def __len__(self):

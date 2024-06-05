@@ -298,6 +298,7 @@ class InferenceSession:
             for attempt_no in itertools.count():
                 logger.debug(f"Inference: block {block_idx}, attempt {attempt_no}")
                 server_session = None
+                disagreement = False
                 try:
                     if not self._server_sessions or attempt_no >= 1:
                         self._update_sequence(server_idx, block_idx, attempt_no)
@@ -322,21 +323,23 @@ class InferenceSession:
                     
                     if run_second_inference and not torch.allclose(inputs , second_inputs):
                         logger.warning(f"Outputs from two different paths are different")
+                        disagreement = True
                         raise ValueError("Outputs from two different paths are different")
 
                     server_idx += 1
                     block_idx = server_session.span.end
-                    self._sequence_manager.on_request_success(server_session.span.peer_id)
+                    self._sequence_manager.on_request_success(server_session.span.peer_id, run_second_inference)
                     if run_second_inference:
-                        self._sequence_manager.on_request_success(second_server_session.span.peer_id)
+                        self._sequence_manager.on_request_success(second_server_session.span.peer_id, run_second_inference)
                     break
                 except Exception as e:
                     self._sequence_manager.on_request_failure(
-                        server_session.span.peer_id if server_session is not None else None
+                        server_session.span.peer_id if server_session is not None else None, disagreement
                     )
-                    self._sequence_manager.on_request_failure(
-                        second_server_session.span.peer_id if second_server_session is not None and server_session!=second_server_session else None
-                    )
+                    if server_session != second_server_session:
+                        self._sequence_manager.on_request_failure(
+                            second_server_session.span.peer_id if second_server_session is not None else None, disagreement
+                        )
                     if attempt_no + 1 == self._sequence_manager.config.max_retries:
                         raise
                     delay = self._sequence_manager.get_retry_delay(attempt_no)
