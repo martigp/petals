@@ -13,4 +13,5 @@ with open(args.logfile) as f:
             element = datetime.datetime.strptime(s, '%H:%M:%S.%f') 
             timestamps.append(datetime.datetime.timestamp(element))
 
-print(f"Total Iterations: {len(timestamps)}, Time taken: {timestamps[-1] - timestamps[0]} seconds")
+print(f"Total Iterations: {len(timestamps)-1}, Time taken: {timestamps[-1] - timestamps[0]} seconds", end=" ")
+print(f"Average time per iteration: {(timestamps[-1] - timestamps[0])/(len(timestamps)-1)} seconds")
