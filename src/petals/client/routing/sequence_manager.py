@@ -480,7 +480,7 @@ class RemoteSequenceManager:
                 dtype=np.float64
             )
             reputation_weights /= reputation_weights.sum()
-            span_weights = ((1-self.reputation_weight) * throughput_weights) + (self.reputation_weight * reputation_weights)
+            span_weights = ((1-self.state.reputation_weight) * throughput_weights) + (self.state.reputation_weight * reputation_weights)
 
             chosen_span = np.random.choice(candidate_spans, p=span_weights)
 
@@ -556,8 +556,9 @@ class RemoteSequenceManager:
         logger.info(f"On request failure: {peer_id}")
         if peer_id is not None and not disagreement:
             if disagreement:
-                logger.debug(f"Peer {peer_id} disagreed, harming reputation")
-                self.state.reputations.register_disagreement(peer_id)
+                if self.state.reputations.get_peer_reputation(peer_id) <= 1.0:
+                    logger.debug(f"Peer {peer_id} disagreed, harming reputation")
+                    self.state.reputations.register_disagreement(peer_id)
             else:
                 logger.debug(f"Peer {peer_id} did not respond, banning it temporarily")
                 self.state.banned_peers.register_failure(peer_id)

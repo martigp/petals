@@ -299,6 +299,7 @@ class InferenceSession:
             for attempt_no in itertools.count():
                 logger.debug(f"Inference: block {block_idx}, attempt {attempt_no}")
                 server_session = None
+                second_server_session = None
                 disagreement = False
                 try:
                     if not self._server_sessions or attempt_no >= 1:
