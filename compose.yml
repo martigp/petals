@@ -18,18 +18,18 @@ services:
      networks:
        - mynet
      deploy:
-       replicas: 7
-  malicious_server:
-    build:
-      context: .
-      target: malicious_server
-    depends_on:
-      - backbone
-    restart: unless-stopped
-    networks:
-      - mynet
-    deploy:
-      replicas: 1
+       replicas: 8
+  # malicious_server:
+  #   build:
+  #     context: .
+  #     target: malicious_server
+  #   depends_on:
+  #     - backbone
+  #   restart: unless-stopped
+  #   networks:
+  #     - mynet
+  #   deploy:
+  #     replicas: 1
   client:
     build:
       context: .
@@ -44,18 +44,18 @@ services:
     restart: unless-stopped
     networks:
       - mynet
-  trusted_server:
-    build:
-      context: .
-      target: trusted_server
-    depends_on:
-      - backbone
-    restart: unless-stopped
-    networks:
-      mynet:
-        ipv4_address: 172.28.5.3
-    deploy:
-      replicas: 1
+  # trusted_server:
+  #   build:
+  #     context: .
+  #     target: trusted_server
+  #   depends_on:
+  #     - backbone
+  #   restart: unless-stopped
+  #   networks:
+  #     mynet:
+  #       ipv4_address: 172.28.5.3
+  #   deploy:
+  #     replicas: 1
 
 networks:
   mynet:
