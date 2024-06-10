@@ -15,7 +15,7 @@ from hivemind.proto import runtime_pb2
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 from petals.client.config import ClientConfig
-from petals.client.routing import RemoteSequenceManager, maybe_log_traceback
+from petals.client.routing import RemoteSequenceManager, maybe_log_traceback, DisagreementStatus
 from petals.data_structures import CHAIN_DELIMITER, ModuleUID, RemoteSpanInfo, RPCInfo
 from petals.server.handler import TransformerConnectionHandler
 from petals.utils.misc import DUMMY, DUMMY_INT64, is_dummy
@@ -300,7 +300,7 @@ class InferenceSession:
                 logger.debug(f"Inference: block {block_idx}, attempt {attempt_no}")
                 server_session = None
                 second_server_session = None
-                disagreement = False
+                disagreement = True
                 try:
                     if not self._server_sessions or attempt_no >= 1:
                         self._update_sequence(server_idx, block_idx, attempt_no)
@@ -320,17 +320,25 @@ class InferenceSession:
                     thread.start()
                     if run_second_inference:
                         logger.info(f"Running inference via second server")
-                        second_inputs = second_server_session.step(
-                            second_inputs, prompts[second_server_session.span.start : second_server_session.span.end], hypo_ids, step_id=step_id
-                        )
+                        def g():
+                            nonlocal second_inputs
+                            second_inputs = second_server_session.step(
+                                second_inputs, prompts[second_server_session.span.start : second_server_session.span.end], hypo_ids, step_id=step_id
+                            )
+                        thread_second = threading.Thread(target=g)
+                        thread_second.start()
+                        thread_second.join()
                     thread.join()
+
                     if not run_second_inference: 
                         logger.info(f"Serving from the same server, skipping second server inference")
                         second_inputs = inputs
                     
                     if run_second_inference and not torch.allclose(inputs , second_inputs):
                         logger.warning(f"Outputs from two different paths are different")
+
                         disagreement = True
+
                         raise ValueError("Outputs from two different paths are different")
 
                     server_idx += 1
@@ -341,12 +349,10 @@ class InferenceSession:
                     break
                 except Exception as e:
                     self._sequence_manager.on_request_failure(
-                        server_session.span.peer_id if server_session is not None else None, disagreement
+                        server_session.span.peer_id if server_session is not None else None,
+                        second_server_session.span.peer_id if second_server_session is not None else None
                     )
-                    if server_session != second_server_session:
-                        self._sequence_manager.on_request_failure(
-                            second_server_session.span.peer_id if second_server_session is not None else None, disagreement
-                        )
+
                     if attempt_no + 1 == self._sequence_manager.config.max_retries:
                         raise
                     delay = self._sequence_manager.get_retry_delay(attempt_no)

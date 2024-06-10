@@ -11,6 +11,7 @@ import warnings
 from typing import Any, Dict, List, Optional, Sequence, Set, Union
 from weakref import WeakMethod
 import os
+from enum import Enum
 
 import dijkstar
 import numpy as np
@@ -83,11 +84,18 @@ class PeerReputations:
         if peer not in self.peer_reputations:
             self.peer_reputations[peer] = Reputation()
         return self.peer_reputations[peer].get_reputation()
+    
+    def is_peer_trusted(self, peer : PeerID) -> bool:
+        return self.peer_reputations[peer].trusted
 
     def add_peer(self, peer: PeerID, trusted : bool = False):
         self.peer_reputations[peer] = Reputation(trusted)
 
-
+class DisagreementStatus(Enum):
+    NO_DISAGREE = 1,
+    PEER_A_TRUSTED = 2,
+    PEER_B_TRUSTED = 3,
+    BOTH_UNTRUSTED = 4
 
 
 class SequenceManagerConfig(ClientConfig):
@@ -108,7 +116,7 @@ class SequenceManagerState:
     rpc_info: Optional[dict] = None
     banned_peers: Optional[Blacklist] = None
     reputations: Optional[PeerReputations] = None
-    trusted_peers : Optional[list[PeerID]] = None
+    trusted_peers : Optional[set[PeerID]] = None
     path_replication : Optional[float] = None
     reputation_weight : Optional[float] = None
 
@@ -170,7 +178,7 @@ class RemoteSequenceManager:
             trusted_peers_str : str = os.environ.get("TRUSTED_PEERS")
             if trusted_peers_str != None:
                 trusted_peers = trusted_peers_str.split(',')
-                self.trusted_peers = [PeerID.from_base58(Multiaddr(item)["p2p"]) for item in trusted_peers]
+                self.trusted_peers = set([PeerID.from_base58(Multiaddr(item)["p2p"]) for item in trusted_peers])
                 for trusted_peer in self.trusted_peers:
                     self.state.reputations.add_peer(trusted_peer, trusted=True)
                     logger.info(f"GORDON: trusted peer peerid {trusted_peer.to_string()}")
@@ -324,7 +332,6 @@ class RemoteSequenceManager:
                 continue
             
             logger.info(f"Found {len(candidates)} candidates to replace span from {span.start}->{span.end}")
-            logger.info(f"Candidate weights: {candidate_weights}")
             candidate_weights = np.array(candidate_weights) / np.sum(candidate_weights)
             chosen_candidate = np.random.choice(candidates, p=candidate_weights)
             new_path.append(chosen_candidate)
@@ -551,17 +558,23 @@ class RemoteSequenceManager:
 
         self.ready.set()
 
-    def on_request_failure(self, peer_id: Optional[PeerID], disagreement : bool = False):
+    def on_request_failure(self, peer_id: Optional[PeerID], other_peer_id : Optional[PeerID]):
         """remove a given peer from the routing table. If the routing is no longer possible, trigger an update"""
         logger.info(f"On request failure: {peer_id}")
-        if peer_id is not None and not disagreement:
-            if disagreement:
-                if self.state.reputations.get_peer_reputation(peer_id) <= 1.0:
+        if peer_id is not None:
+            if other_peer_id is not None:
+                if peer_id in self.state.trusted_peers:
+                    self.state.banned_peers.register_failure(other_peer_id)
+                elif other_peer_id in self.state.trusted_peers:
+                    self.state.banned_peers.register_failure(peer_id)
+                else:
                     logger.debug(f"Peer {peer_id} disagreed, harming reputation")
                     self.state.reputations.register_disagreement(peer_id)
+                    self.state.reputations.register_disagreement(other_peer_id)
             else:
                 logger.debug(f"Peer {peer_id} did not respond, banning it temporarily")
                 self.state.banned_peers.register_failure(peer_id)
+                
         with self.lock_changes:
             should_update = False
             for info in self.state.sequence_info.block_infos:
