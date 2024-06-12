@@ -300,6 +300,7 @@ class InferenceSession:
                 logger.debug(f"Inference: block {block_idx}, attempt {attempt_no}")
                 server_session = None
                 second_server_session = None
+                other_peer_id = None
                 disagreement = True
                 try:
                     if not self._server_sessions or attempt_no >= 1:
@@ -309,6 +310,7 @@ class InferenceSession:
                     second_server_session = self._second_server_sessions[server_idx]
                     run_second_inference = server_session.span.peer_id != second_server_session.span.peer_id
                     if run_second_inference:
+                        other_peer_id = second_server_session.span.peer_id
                         second_inputs = inputs.detach().clone()
                     logger.info(f"Running inference for {block_idx} via {server_session.span.peer_id} and {second_server_session.span.peer_id}")
                     def f():
@@ -343,15 +345,23 @@ class InferenceSession:
 
                     server_idx += 1
                     block_idx = server_session.span.end
-                    self._sequence_manager.on_request_success(server_session.span.peer_id, run_second_inference)
-                    if run_second_inference:
-                        self._sequence_manager.on_request_success(second_server_session.span.peer_id, run_second_inference)
+                    self._sequence_manager.on_request_success(server_session.span.peer_id, 
+                                                              other_peer_id)
                     break
                 except Exception as e:
                     self._sequence_manager.on_request_failure(
                         server_session.span.peer_id if server_session is not None else None,
-                        second_server_session.span.peer_id if second_server_session is not None else None
+                        other_peer_id
                     )
+
+                    if server_session is not None:
+                        if other_peer_id is not None:
+                            if server_session.span.peer_id in self._sequence_manager.trusted_peers:
+                                server_idx += 1
+                                continue
+                            elif other_peer_id in self._sequence_manager.trusted_peers:
+                                self._server_sessions[server_idx] = second_server_session
+
 
                     if attempt_no + 1 == self._sequence_manager.config.max_retries:
                         raise

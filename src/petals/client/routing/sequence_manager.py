@@ -486,6 +486,12 @@ class RemoteSequenceManager:
                 [self.state.reputations.get_peer_reputation(span.peer_id) for span in candidate_spans],
                 dtype=np.float64
             )
+
+            filtered_reputation_mask = reputation_weights > 0.33
+
+            reputation_weights = reputation_weights[filtered_reputation_mask]
+            throughput_weights = throughput_weights[filtered_reputation_mask]
+
             reputation_weights /= reputation_weights.sum()
             span_weights = ((1-self.state.reputation_weight) * throughput_weights) + (self.state.reputation_weight * reputation_weights)
 
@@ -568,7 +574,7 @@ class RemoteSequenceManager:
                 elif other_peer_id in self.state.trusted_peers:
                     self.state.banned_peers.register_failure(peer_id)
                 else:
-                    logger.debug(f"Peer {peer_id} disagreed, harming reputation")
+                    logger.debug(f"Peer {peer_id} and {other_peer_id} disagreed, harming reputation")
                     self.state.reputations.register_disagreement(peer_id)
                     self.state.reputations.register_disagreement(other_peer_id)
             else:
@@ -585,11 +591,12 @@ class RemoteSequenceManager:
                 self.ready.clear()
                 self.update(wait=False)
 
-    def on_request_success(self, peer_id: PeerID, registerAgreement : bool = True):
+    def on_request_success(self, peer_id: PeerID, other_peer_id : Optional[PeerID ]):
         """if peer has a failure streak, clear that streak"""
-        if registerAgreement:
+        if other_peer_id is not None:
             logger.debug(f"Peer {peer_id} agreed, improving reputation")
             self.state.reputations.register_agreement(peer_id)
+            self.state.reputations.register_agreement(other_peer_id)
         
         self.state.banned_peers.register_success(peer_id)
 
